@@ -1,8 +1,8 @@
 import {
-    BadRequestException,
-    Injectable,
-    NotFoundException,
-    UnauthorizedException
+	BadRequestException,
+	Injectable,
+	NotFoundException,
+	UnauthorizedException
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { JwtService } from '@nestjs/jwt'
@@ -94,9 +94,8 @@ export class AuthService {
 					picture: req.user.picture
 				},
 				include: {
-					stores: true,
-					favorites: true,
-					orders: true
+					photos: true,
+					comments: true
 				}
 			})
 		}
