@@ -1,0 +1,241 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+generator client {
+  provider      = "prisma-client-js"
+  output        = "../generated/prisma"
+  binaryTargets = ["native", "darwin-arm64", "linux-arm64-openssl-3.0.x", "debian-openssl-3.0.x", "linux-musl"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  email    String  @unique
+  password String?
+
+  name    String @default("Not defined")
+  picture String @default("/uploads/no-user-image.png")
+  
+  // Relationships of visual-analyser-api project
+  photos   Photo[]
+  comments Comment[]
+
+  // Relationships with another project (multi e shop api project) user model
+  stores Store[]
+
+  favorites Product[]
+  reviews   Review[]
+  orders    Order[]
+
+  @@map("user")
+}
+
+model Photo {
+  id        String    @id @default(uuid())
+  title     String
+  // Stored URL of the image in Supabase Storage
+  imageUrl  String
+  // Geotagging data: Latitude and Longitude
+  latitude  Float
+  longitude Float
+  // The user who uploaded the photo
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  // Optional AI-generated description
+  aiDescription String?
+  
+  comments  Comment[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  text      String   @db.Text
+  
+  // Link to the user who created the comment
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // Link to the photo the comment is on
+  photoId   String
+  photo     Photo    @relation(fields: [photoId], references: [id])
+  
+  createdAt DateTime @default(now())
+}
+
+
+model Store {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String?
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @map("user_id")
+
+  products   Product[]
+  categories Category[]
+  colors     Color[]
+  reviews    Review[]
+  orderItems OrderItem[]
+
+  @@map("store")
+}
+
+model Product {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String
+  price       Int
+  images      String[]
+
+  reviews    Review[]
+  orderItems OrderItem[]
+
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String? @map("store_id")
+
+  category   Category? @relation(fields: [categoryId], references: [id])
+  categoryId String?   @map("category_id")
+
+  color   Color?  @relation(fields: [colorId], references: [id])
+  colorId String? @map("color_id")
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @map("user_id")
+
+  @@map("product")
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  title       String
+  description String
+
+  products Product[]
+
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String? @map("store_id")
+
+  @@map("category")
+}
+
+model Color {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  name  String
+  value String
+
+  products Product[]
+
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String? @map("store_id")
+
+  @@map("color")
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  text   String
+  rating Int
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @map("user_id")
+
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?  @map("product_id")
+
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String? @map("store_id")
+
+  @@map("review")
+}
+
+model Order {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  status EnumOrderStatus @default(PENDING)
+
+  items OrderItem[]
+  total Int
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? @map("user_id")
+
+  @@map("order")
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  quantity Int
+  price    Int
+
+  order   Order?  @relation(fields: [orderId], references: [id])
+  orderId String? @map("order_id")
+
+  product   Product? @relation(fields: [productId], references: [id])
+  productId String?  @map("product_id")
+
+  store   Store?  @relation(fields: [storeId], references: [id])
+  storeId String? @map("store_id")
+
+  @@map("order_item")
+}
+
+enum EnumOrderStatus {
+  PENDING
+  PAYED
+}
+
+// FROM ANOTHER PROJECT : doc ai analysis
+model backgrounds {
+  id               Int      @id @default(autoincrement())
+  image            String
+  new_background   String?
+  review           String?
+  review_completed Boolean? @default(false)
+  theme            String?
+}
+
+model documents {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  filename       String    @db.VarChar(255)
+  mimetype       String    @db.VarChar(100)
+  storage_url    String
+  user_id        String    @db.VarChar(255)
+  status         String    @default("UPLOADED") @db.VarChar(50)
+  llm_prompt     String?
+  extracted_data Json?
+  error_details  String?
+  created_at     DateTime? @default(now()) @db.Timestamptz(6)
+  updated_at     DateTime? @default(now()) @db.Timestamptz(6)
+}
