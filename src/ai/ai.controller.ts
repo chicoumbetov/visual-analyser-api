@@ -1,4 +1,4 @@
-import { Controller, MessageEvent, Sse, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, MessageEvent, Post, Sse, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
@@ -33,7 +33,8 @@ export class AiController {
      * Accepts a file upload and streams the AI-generated description back 
      * using Server-Sent Events (SSE).
      */
-    @Sse('stream-analysis') // * decorator, which tells NestJS to manage the SSE connection and expects an Observable or a Readable stream (which AiService already returns)
+    @Post('stream-analysis')
+    @Sse() // ('stream-analysis') // * decorator, which tells NestJS to manage the SSE connection and expects an Observable or a Readable stream (which AiService already returns)
     @UseInterceptors(FileInterceptor('image')) // Expects the file to be under the 'image' field
     async streamAnalysis(@UploadedFile() file: Express.Multer.File): Promise<Observable<MessageEvent>> {
 
