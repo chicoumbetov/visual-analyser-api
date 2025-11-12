@@ -90,31 +90,54 @@ export class AiService {
      * @param file The image file buffer and mime type.
      * @returns The complete generated text description.
      */
+    /**
+     * Generates a single, complete description for an image (non-streaming, used during upload).
+     * Implements exponential backoff to handle transient 503 UNAVAILABLE errors.
+     * @param file The image file buffer and mime type.
+     * @returns The complete generated text description or null on final failure.
+     */
     async generateImageDescription(file: Express.Multer.File): Promise<string | null> {
         this.logger.log(`Starting sync analysis for image MIME type: ${file.mimetype}`);
 
         const imagePart = this.fileToGenerativePart(file.buffer, file.mimetype);
         const prompt = 'Analyze this photo and generate a concise, professional, and technical description in one paragraph, suitable for an infrastructure inspection report. Focus on key elements and conditions.';
 
-        try {
-            const response = await this.ai.models.generateContent({ 
-                model: AI_MODEL,
-                contents: [{ role: 'user', parts: [imagePart, { text: prompt }] }],
-            });
+        const MAX_RETRIES = 3;
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                this.logger.log(`Attempt ${attempt} of ${MAX_RETRIES} to call Gemini API.`);
+                
+                const response = await this.ai.models.generateContent({ 
+                    model: AI_MODEL, // This is still 'gemini-2.5-flash'
+                    contents: [{ role: 'user', parts: [imagePart, { text: prompt }] }],
+                });
 
-            // ⭐ FIX: Safely check if response.text exists before using it.
-            if (response.text) {
-                return response.text.trim();
-            } else {
-                // Log if a non-error response was received but contained no text (e.g., filtered content)
-                this.logger.warn('Gemini API response was successful but contained no text/content.');
-                return null;
+                if (response.text) {
+                    return response.text.trim();
+                } else {
+                    this.logger.warn(`Attempt ${attempt} succeeded but returned no text/content. Retrying...`);
+                }
+
+            } catch (error) {
+                // Check if it's the expected 503 error
+                const isRetryableError = error.message && (
+                    error.message.includes('"code":503') ||
+                    error.message.includes('The model is overloaded')
+                );
+
+                if (attempt < MAX_RETRIES && isRetryableError) {
+                    const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s delay
+                    this.logger.warn(`Gemini API Sync Error (Attempt ${attempt}): ${error.message}. Retrying in ${delay / 1000}s...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue; // Continue to the next loop iteration (retry)
+                } 
+                
+                // If it's the last attempt or a different error (like 400, 403, 404), throw/return null
+                this.logger.error('Gemini API Final Error or Unhandled:', error.message);
+                return null; 
             }
-
-        } catch (error) {
-            this.logger.error('Gemini API Sync Error:', error.message);
-            // If AI fails, we log and return null, allowing the photo upload to succeed.
-            return null; 
         }
+        
+        return null; // Should be unreachable, but ensures method returns null on final failure.
     }
 }
