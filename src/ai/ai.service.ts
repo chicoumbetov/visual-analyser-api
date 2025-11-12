@@ -1,29 +1,34 @@
+import { GoogleGenAI, Part } from '@google/genai';
 import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-// CORRECT IMPORT: Use the new package and class name
-import { GoogleGenAI, Part } from '@google/genai';
 import { Readable } from 'stream';
 
-// Define the model we want to use for image analysis
 const AI_MODEL = 'gemini-2.5-flash';
+const MAX_RETRIES = 3;
 
 @Injectable()
 export class AiService {
-    // Correct client type
-    private readonly ai: GoogleGenAI; 
+    private ai: GoogleGenAI | null = null; 
     private readonly logger = new Logger(AiService.name);
 
     constructor(private configService: ConfigService) {
-        // Securely retrieve the API key from the environment
-        const apiKey = this.configService.get<string>('GEMINI_API_KEY');
+    }
+    
+    /**
+     * * Initializes the GoogleGenAI client only on first call (Lazy Load).
+     */
+    private getAiClient(): GoogleGenAI {
+        if (this.ai === null) {
+            this.logger.log('Initializing GoogleGenAI client (Lazy Load) due to first request...');
+            const apiKey = this.configService.get<string>('GEMINI_API_KEY');
 
-        if (!apiKey) {
-            this.logger.error('GEMINI_API_KEY is missing from environment configuration.');
-            throw new InternalServerErrorException('AI Service configuration is incomplete.');
+            if (!apiKey) {
+                 this.logger.error('GEMINI_API_KEY is missing from environment configuration.');
+                 throw new InternalServerErrorException('AI Service configuration is incomplete.');
+            }
+            this.ai = new GoogleGenAI({ apiKey });
         }
-
-        // Initialize the SDK with the key. The new SDK uses a configuration object.
-        this.ai = new GoogleGenAI({ apiKey }) // : "AIzaSyBCBz3wQu9Jjd_icCDZf-17CUO_O8IynwI" }) // * youtuber
+        return this.ai;
     }
 
     /**
@@ -56,13 +61,13 @@ export class AiService {
         const prompt = 'Analyze this photo and generate a concise, professional, and technical description in one paragraph, suitable for an infrastructure inspection report. Focus on key elements and conditions.';
 
         try {
-            // FIX: models is now accessed via the 'ai' instance property.
-            const responseStream = await this.ai.models.generateContentStream({ 
+            // * Use the lazy-loaded client
+            const client = this.getAiClient();
+            const responseStream = await client.models.generateContentStream({ 
                 model: AI_MODEL,
                 contents: [{ role: 'user', parts: [imagePart, { text: prompt }] }],
             });
-            
-            // ... (Rest of the streaming logic remains the same) ...
+
             const outputStream = new Readable({
                 read() {},
             });
@@ -87,11 +92,6 @@ export class AiService {
 
     /**
      * Generates a single, complete description for an image (non-streaming, used during upload).
-     * @param file The image file buffer and mime type.
-     * @returns The complete generated text description.
-     */
-    /**
-     * Generates a single, complete description for an image (non-streaming, used during upload).
      * Implements exponential backoff to handle transient 503 UNAVAILABLE errors.
      * @param file The image file buffer and mime type.
      * @returns The complete generated text description or null on final failure.
@@ -102,13 +102,14 @@ export class AiService {
         const imagePart = this.fileToGenerativePart(file.buffer, file.mimetype);
         const prompt = 'Analyze this photo and generate a concise, professional, and technical description in one paragraph, suitable for an infrastructure inspection report. Focus on key elements and conditions.';
 
-        const MAX_RETRIES = 3;
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
                 this.logger.log(`Attempt ${attempt} of ${MAX_RETRIES} to call Gemini API.`);
                 
-                const response = await this.ai.models.generateContent({ 
-                    model: AI_MODEL, // This is still 'gemini-2.5-flash'
+                // * Use the lazy-loaded client
+                const client = this.getAiClient();
+                const response = await client.models.generateContent({ 
+                    model: AI_MODEL,
                     contents: [{ role: 'user', parts: [imagePart, { text: prompt }] }],
                 });
 
@@ -119,17 +120,16 @@ export class AiService {
                 }
 
             } catch (error) {
-                // Check if it's the expected 503 error
                 const isRetryableError = error.message && (
                     error.message.includes('"code":503') ||
                     error.message.includes('The model is overloaded')
                 );
 
                 if (attempt < MAX_RETRIES && isRetryableError) {
-                    const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s delay
+                    const delay = Math.pow(2, attempt) * 1000
                     this.logger.warn(`Gemini API Sync Error (Attempt ${attempt}): ${error.message}. Retrying in ${delay / 1000}s...`);
                     await new Promise(resolve => setTimeout(resolve, delay));
-                    continue; // Continue to the next loop iteration (retry)
+                    continue
                 } 
                 
                 // If it's the last attempt or a different error (like 400, 403, 404), throw/return null
@@ -138,6 +138,6 @@ export class AiService {
             }
         }
         
-        return null; // Should be unreachable, but ensures method returns null on final failure.
+        return null
     }
 }
