@@ -24,6 +24,14 @@ export class PhotoService {
         // If the AI call fails, it will return null, and the upload will still succeed.
         const aiDescription = await this.aiService.generateImageDescription(file);
 
+        /* Next time : true scalable HyLight production system, I must formally articulate the plan to move the generateImageDescription call to a background worker/queue.
+            // 1. Upload and save basic metadata (FAST)
+            const newPhoto = await this.prisma.photo.create({ data: {..., aiDescription: null} });
+
+            // 2. Post a job to a dedicated queue (e.g., Redis Queue, BullMQ, NestJS/bull)
+            await this.queueService.addAiAnalysisJob({ photoId: newPhoto.id, fileBuffer: file.buffer, mimeType: file.mimetype }); 
+        */
+
         // * 3. Save metadata to the database
         const newPhoto = await this.prisma.photo.create({
             data: {
