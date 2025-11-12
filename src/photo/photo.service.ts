@@ -26,8 +26,8 @@ export class PhotoService {
         const newPhoto = await this.prisma.photo.create({
             data: {
                 title: dto.title,
-                latitude: dto.latitude,
-                longitude: dto.longitude,
+                latitude: parseFloat(String(dto.latitude)),
+                longitude: parseFloat(String(dto.longitude)),
                 imageUrl: imageUrl, // Stored public URL
                 userId: userId,
             },
