@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Photo } from 'generated/prisma';
+import { AiService } from 'src/ai/ai.service';
 import { PrismaService } from 'src/prisma.service';
 import { StorageService } from 'src/storage/storage.service';
 import { CreatePhotoDto, PhotoRdo } from './dto/create-photo.dto';
@@ -9,32 +10,31 @@ export class PhotoService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly storageService: StorageService,
+        private readonly aiService: AiService,
     ) {}
 
     /**
-     * Handles the file upload and saves the photo metadata to the database.
-     * @param file The image file buffer.
-     * @param dto Photo metadata (title, lat, lng).
-     * @param userId The ID of the authenticated user.
-     * @returns The created Photo entity.
+     * Handles the file upload, AI analysis, and saves the photo metadata to the database.
      */
     async create(file: Express.Multer.File, dto: CreatePhotoDto, userId: string): Promise<Photo> {
-        // * Upload file to Supabase Storage
+        // * 1. Upload file to Supabase Storage
         const imageUrl = await this.storageService.uploadPhoto(file, userId)
 
-        // * Save metadata to the database
+        // * 2. Generate AI Description (Non-Streaming/Sync)
+        // If the AI call fails, it will return null, and the upload will still succeed.
+        const aiDescription = await this.aiService.generateImageDescription(file);
+
+        // * 3. Save metadata to the database
         const newPhoto = await this.prisma.photo.create({
             data: {
                 title: dto.title,
                 latitude: parseFloat(String(dto.latitude)),
                 longitude: parseFloat(String(dto.longitude)),
-                imageUrl: imageUrl, // Stored public URL
+                imageUrl: imageUrl, 
                 userId: userId,
+                aiDescription: aiDescription, // <-- 4. SAVE AI DESCRIPTION
             },
         })
-
-        // TODO: integrate the AI feature later, the call to the AI service 
-        // TODO: would happen here, and the result would update the newPhoto record.
 
         return newPhoto
     }
